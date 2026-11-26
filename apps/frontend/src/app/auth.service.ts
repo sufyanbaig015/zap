@@ -2,8 +2,9 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { Router } from '@angular/router';
+import { environment } from '../environments/environment';
 
-const API = 'http://localhost:4000';
+const API = environment.apiUrl;
 
 export interface User {
   id: string;

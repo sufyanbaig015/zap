@@ -2,8 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { GitHubRepo, Zap, ZapRun } from '../models/zap.model';
+import { environment } from '../../environments/environment';
 
-const API = 'http://localhost:4000';
+const API = environment.apiUrl;
 
 @Injectable({ providedIn: 'root' })
 export class ZapService {
