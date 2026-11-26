@@ -51,10 +51,12 @@ router.get("/:id", async (req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Zap not found" });
       return;
     }
+    let webhookWarning: string | undefined;
     if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
-      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      const hookResult = await ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      webhookWarning = hookResult.warning;
     }
-    res.json(zap);
+    res.json({ ...zap.toObject(), ...(webhookWarning ? { webhookWarning } : {}) });
   } catch (err) {
     console.error("[zaps] get error:", err);
     res.status(500).json({ error: "Failed to load Zap" });
@@ -78,10 +80,12 @@ router.post("/", async (req: express.Request, res: express.Response) => {
       actions: normalizedActions,
       action: normalizedActions[0],
     });
+    let webhookWarning: string | undefined;
     if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
-      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      const hookResult = await ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      webhookWarning = hookResult.warning;
     }
-    res.status(201).json(zap);
+    res.status(201).json({ ...zap.toObject(), ...(webhookWarning ? { webhookWarning } : {}) });
   } catch (err) {
     console.error("[zaps] create error:", err);
     res.status(500).json({ error: "Failed to create Zap" });
@@ -121,10 +125,12 @@ router.put("/:id", async (req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Zap not found" });
       return;
     }
+    let webhookWarning: string | undefined;
     if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
-      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      const hookResult = await ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      webhookWarning = hookResult.warning;
     }
-    res.json(zap);
+    res.json({ ...zap.toObject(), ...(webhookWarning ? { webhookWarning } : {}) });
   } catch (err) {
     console.error("[zaps] update error:", err);
     res.status(500).json({ error: "Failed to update Zap" });
@@ -141,10 +147,12 @@ router.patch("/:id/toggle", async (req: express.Request, res: express.Response) 
     }
     zap.enabled = req.body?.enabled !== undefined ? Boolean(req.body.enabled) : !zap.enabled;
     await zap.save();
+    let webhookWarning: string | undefined;
     if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
-      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      const hookResult = await ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+      webhookWarning = hookResult.warning;
     }
-    res.json(zap);
+    res.json({ ...zap.toObject(), ...(webhookWarning ? { webhookWarning } : {}) });
   } catch (err) {
     console.error("[zaps] toggle error:", err);
     res.status(500).json({ error: "Failed to toggle Zap" });
