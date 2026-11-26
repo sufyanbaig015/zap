@@ -21,6 +21,7 @@ import { AvatarMenuComponent } from './components/avatar-menu.component';
 import { ToggleSwitchComponent } from './components/toggle-switch.component';
 import { CustomSelectComponent, SelectOption } from './components/custom-select.component';
 import { AppIconComponent } from './components/app-icon.component';
+import { CopilotPanelComponent } from './components/copilot-panel.component';
 
 type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null;
 
@@ -33,6 +34,7 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
     ToggleSwitchComponent,
     CustomSelectComponent,
     AppIconComponent,
+    CopilotPanelComponent,
   ],
   template: `
     <div class="flex h-screen w-full flex-col overflow-hidden bg-[#fafaf9] text-gray-900">
@@ -134,6 +136,14 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
 
       <!-- Main Workspace: Pannable Dotted Canvas + Side Panel -->
       <div class="relative flex flex-1 overflow-hidden">
+        @if (copilotOpen()) {
+          <app-copilot-panel
+            [currentZapId]="zap()._id"
+            (close)="copilotOpen.set(false)"
+            (zapMutated)="onCopilotMutated($event)"
+          />
+        }
+
         <!-- Pannable Flow Canvas -->
         <main
           class="relative flex-1 overflow-hidden select-none"
@@ -398,6 +408,18 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
             </button>
           </div>
         </main>
+
+        <!-- Bottom-Right Copilot Trigger Button -->
+        <button
+          type="button"
+          (click)="copilotOpen.set(!copilotOpen())"
+          class="absolute bottom-5 right-5 z-20 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-all hover:bg-gray-800 hover:scale-[1.02] cursor-pointer"
+        >
+          <svg class="h-4 w-4 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 3l1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3z" />
+          </svg>
+          Build using Copilot
+        </button>
 
         <!-- SIDE PANEL (Step Configuration) -->
         <aside
@@ -975,6 +997,20 @@ export class ZapBuilderComponent implements OnInit {
     if (!step) return '';
     return step.type === 'trigger' ? '1. Trigger' : `${step.index + 2}. Action`;
   });
+
+  copilotOpen = signal(false);
+
+  onCopilotMutated(event: { mutatedZapIds: string[]; createdZapId?: string }): void {
+    const currentId = this.zap()._id;
+    if (event.createdZapId && !currentId) {
+      this.router.navigate(['/zaps', event.createdZapId], { replaceUrl: true });
+      this.loadZap(event.createdZapId);
+      return;
+    }
+    if (currentId && event.mutatedZapIds.includes(currentId)) {
+      this.loadZap(currentId);
+    }
+  }
 
   ngOnInit(): void {
     this.auth.user$.subscribe((u) => this.user.set(u));
