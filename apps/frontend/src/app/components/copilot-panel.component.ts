@@ -180,13 +180,35 @@ export class CopilotPanelComponent {
     this.loading.set(true);
 
     const payload = updated.map((m) => ({ role: m.role, text: m.text }));
-    this.copilotService.chat(payload, this.currentZapId).subscribe({
-      next: (res) => {
+    // Add an empty assistant message that will be populated live via SSE
+    this.messages.update((msgs) => [...msgs, { role: 'model', text: '', toolCalls: [] }]);
+
+    this.copilotService.chatStream(payload, this.currentZapId, {
+      onChunk: (chunkText) => {
+        this.messages.update((msgs) => {
+          const next = [...msgs];
+          const last = next[next.length - 1];
+          if (last && last.role === 'model') {
+            next[next.length - 1] = { ...last, text: last.text + chunkText };
+          }
+          return next;
+        });
+      },
+      onToolCall: (tc) => {
+        this.messages.update((msgs) => {
+          const next = [...msgs];
+          const last = next[next.length - 1];
+          if (last && last.role === 'model') {
+            next[next.length - 1] = {
+              ...last,
+              toolCalls: [...(last.toolCalls || []), tc],
+            };
+          }
+          return next;
+        });
+      },
+      onDone: (res) => {
         this.loading.set(false);
-        this.messages.update((msgs) => [
-          ...msgs,
-          { role: 'model', text: res.reply, toolCalls: res.toolCalls },
-        ]);
         if (res.mutatedZapIds?.length || res.createdZapId) {
           this.zapMutated.emit({
             mutatedZapIds: res.mutatedZapIds || [],
@@ -194,9 +216,9 @@ export class CopilotPanelComponent {
           });
         }
       },
-      error: (err) => {
+      onError: (errMsg) => {
         this.loading.set(false);
-        this.error.set(err?.error?.error || 'Failed to reach Copilot');
+        this.error.set(errMsg);
       },
     });
   }
