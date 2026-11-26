@@ -304,7 +304,12 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    const fallbackModels = [
+      primaryModel,
+      process.env.GEMINI_FALLBACK_MODEL || "gemini-4-hydrogen",
+      "gemini-3.5-flash-lite",
+    ].filter((m, idx, arr) => Boolean(m) && arr.indexOf(m) === idx);
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -329,14 +334,31 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
     const MAX_TURNS = 8;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const stream = await ai.models.generateContentStream({
-        model,
-        contents,
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          tools: [{ functionDeclarations: copilotTools }],
-        },
-      });
+      let stream: Awaited<ReturnType<typeof ai.models.generateContentStream>> | undefined;
+      let lastErr: any;
+      for (const candidateModel of fallbackModels) {
+        try {
+          stream = await ai.models.generateContentStream({
+            model: candidateModel,
+            contents,
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              tools: [{ functionDeclarations: copilotTools }],
+            },
+          });
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          const status = err?.status ?? err?.code;
+          if (status === 503 || status === 429 || String(err?.message).includes("503")) {
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!stream) {
+        throw lastErr || new Error("All Gemini models are currently unavailable.");
+      }
 
       const functionCalls: Array<{ name?: string; args?: Record<string, unknown> }> = [];
       let modelParts: any[] = [];
