@@ -115,9 +115,11 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
           <span class="hidden sm:block h-4 w-px bg-gray-200"></span>
 
           <app-avatar-menu [user]="user()" [inline]="true" />
+        </div>
+      </header>
 
       @if (warningMessage()) {
-        <div class="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+        <div class="relative z-20 flex shrink-0 items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
           <span>{{ warningMessage() }}</span>
           <button
             type="button"
@@ -129,8 +131,6 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
           </button>
         </div>
       }
-        </div>
-      </header>
 
       <!-- Main Workspace: Pannable Dotted Canvas + Side Panel -->
       <div class="relative flex flex-1 overflow-hidden">
