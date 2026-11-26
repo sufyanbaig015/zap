@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Custom animations */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-custom {
+  animation: pulse 2s infinite;
+}
+
+/* You can add global styles to this file, and also import other style files */
+
