@@ -292,7 +292,7 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
       return;
     }
 
-    const userId = String((req.user as any)._id);
+    const userId = req.user!.id;
     const { messages, currentZapId } = req.body as {
       messages: Array<{ role: "user" | "model"; text: string }>;
       currentZapId?: string;
