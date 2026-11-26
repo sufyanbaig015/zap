@@ -304,7 +304,16 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
     }
 
     const ai = new GoogleGenAI({ apiKey });
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const sendEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
 
     const contextPrefix = currentZapId
       ? `[Context: The user currently has Zap ID "${currentZapId}" open in the Zap Builder.]\n`
@@ -317,13 +326,10 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
 
     const mutatedZapIds = new Set<string>();
     const createdZapIds: string[] = [];
-    const executedTools: Array<{ name: string; args: Record<string, any> }> = [];
-
-    let finalReply = "";
     const MAX_TURNS = 8;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const response = await ai.models.generateContent({
+      const stream = await ai.models.generateContentStream({
         model,
         contents,
         config: {
@@ -332,19 +338,30 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
         },
       });
 
-      const functionCalls = response.functionCalls;
-      if (functionCalls && functionCalls.length > 0) {
-        // Append model's function call turn
-        const modelContent = response.candidates?.[0]?.content;
-        if (modelContent) {
-          contents.push(modelContent);
+      const functionCalls: Array<{ name?: string; args?: Record<string, unknown> }> = [];
+      let modelParts: any[] = [];
+
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          sendEvent("chunk", { text: chunk.text });
         }
+        if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+          functionCalls.push(...chunk.functionCalls);
+        }
+        const parts = chunk.candidates?.[0]?.content?.parts;
+        if (parts && parts.length > 0) {
+          modelParts.push(...parts);
+        }
+      }
+
+      if (functionCalls.length > 0) {
+        contents.push({ role: "model", parts: modelParts });
 
         const functionResponseParts = [];
         for (const call of functionCalls) {
           const toolName = call.name || "";
           const toolArgs = (call.args || {}) as Record<string, any>;
-          executedTools.push({ name: toolName, args: toolArgs });
+          sendEvent("tool_call", { name: toolName, args: toolArgs });
           const result = await executeTool(toolName, toolArgs, userId, mutatedZapIds, createdZapIds);
           functionResponseParts.push({
             functionResponse: {
@@ -359,20 +376,23 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
           parts: functionResponseParts,
         });
       } else {
-        finalReply = response.text || "Done.";
         break;
       }
     }
 
-    res.json({
-      reply: finalReply || "Completed.",
-      toolCalls: executedTools,
+    sendEvent("done", {
       mutatedZapIds: Array.from(mutatedZapIds),
       createdZapId: createdZapIds[0] || undefined,
     });
+    res.end();
   } catch (err: any) {
     console.error("[copilot] error:", err);
-    res.status(500).json({ error: err?.message || "Copilot request failed" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || "Copilot request failed" });
+    } else {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: err?.message || "Copilot request failed" })}\n\n`);
+      res.end();
+    }
   }
 });
 
