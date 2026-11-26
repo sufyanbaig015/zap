@@ -2,6 +2,7 @@ import express from "express";
 import { requireAuth } from "../middleware/auth";
 import Zap, { IZapAction } from "../models/Zap";
 import ZapRun from "../models/ZapRun";
+import { ensureGitHubWebhook } from "../services/githubWebhook";
 
 const router: express.Router = express.Router();
 
@@ -50,6 +51,9 @@ router.get("/:id", async (req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Zap not found" });
       return;
     }
+    if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
+      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+    }
     res.json(zap);
   } catch (err) {
     console.error("[zaps] get error:", err);
@@ -74,6 +78,9 @@ router.post("/", async (req: express.Request, res: express.Response) => {
       actions: normalizedActions,
       action: normalizedActions[0],
     });
+    if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
+      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+    }
     res.status(201).json(zap);
   } catch (err) {
     console.error("[zaps] create error:", err);
@@ -114,6 +121,9 @@ router.put("/:id", async (req: express.Request, res: express.Response) => {
       res.status(404).json({ error: "Zap not found" });
       return;
     }
+    if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
+      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+    }
     res.json(zap);
   } catch (err) {
     console.error("[zaps] update error:", err);
@@ -131,6 +141,9 @@ router.patch("/:id/toggle", async (req: express.Request, res: express.Response) 
     }
     zap.enabled = req.body?.enabled !== undefined ? Boolean(req.body.enabled) : !zap.enabled;
     await zap.save();
+    if (zap.enabled && zap.trigger.app === "github" && zap.trigger.repository) {
+      void ensureGitHubWebhook(req.user!.accessToken, zap.trigger.repository);
+    }
     res.json(zap);
   } catch (err) {
     console.error("[zaps] toggle error:", err);
