@@ -6,6 +6,8 @@ import passport from "passport";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth";
+import zapRoutes from "./routes/zaps";
+import webhookRoutes from "./routes/webhooks";
 import { configurePassport } from "./config/passport";
 
 dotenv.config();
@@ -47,6 +49,8 @@ configurePassport();
 // --- Routes ---
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/auth", authRoutes);
+app.use("/api/zaps", zapRoutes);
+app.use("/api/webhooks", webhookRoutes);
 
 // --- Start server ---
 app.listen(PORT, () => {
