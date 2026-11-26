@@ -26,6 +26,7 @@ mongoose
   });
 
 // --- Middleware ---
+app.set("trust proxy", 1);
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || "http://localhost:4200", credentials: true }));
 app.use(express.json());
 app.use(
@@ -35,7 +36,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production",
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
