@@ -115,6 +115,20 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
           <span class="hidden sm:block h-4 w-px bg-gray-200"></span>
 
           <app-avatar-menu [user]="user()" [inline]="true" />
+
+      @if (warningMessage()) {
+        <div class="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <span>{{ warningMessage() }}</span>
+          <button
+            type="button"
+            (click)="warningMessage.set('')"
+            class="shrink-0 rounded p-0.5 text-amber-700 hover:bg-amber-100 cursor-pointer"
+            aria-label="Dismiss warning"
+          >
+            ✕
+          </button>
+        </div>
+      }
         </div>
       </header>
 
@@ -880,6 +894,7 @@ export class ZapBuilderComponent implements OnInit {
   saving = signal<boolean>(false);
   saveMessage = signal<string>('');
   errorMessage = signal<string>('');
+  warningMessage = signal<string>('');
 
   repos = signal<GitHubRepo[]>([]);
   loadingRepos = signal<boolean>(false);
@@ -1247,6 +1262,7 @@ export class ZapBuilderComponent implements OnInit {
       this.zapService.toggleZap(id, enabled).subscribe({
         next: (updated) => {
           this.zap.update((z) => ({ ...z, enabled: updated.enabled }));
+          this.warningMessage.set(updated.webhookWarning || '');
           this.flashSaved(updated.enabled ? 'Zap turned on' : 'Zap turned off');
         },
         error: () => {
@@ -1271,6 +1287,7 @@ export class ZapBuilderComponent implements OnInit {
             actions: getZapActions(updated),
           });
           this.saving.set(false);
+          this.warningMessage.set(updated.webhookWarning || '');
           this.flashSaved('Saved');
         },
         error: () => {
@@ -1287,6 +1304,7 @@ export class ZapBuilderComponent implements OnInit {
             actions: getZapActions(created),
           });
           this.saving.set(false);
+          this.warningMessage.set(created.webhookWarning || '');
           this.flashSaved('Zap created');
           if (created._id) {
             this.router.navigate(['/zaps', created._id], { replaceUrl: true });

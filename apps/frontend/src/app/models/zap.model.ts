@@ -28,6 +28,7 @@ export interface Zap {
   action?: ZapAction;
   runCount?: number;
   lastRunAt?: string;
+  webhookWarning?: string;
   createdAt?: string;
   updatedAt?: string;
 }

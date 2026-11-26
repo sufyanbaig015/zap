@@ -12,17 +12,25 @@ interface GitHubHook {
   };
 }
 
+export interface WebhookRegistrationResult {
+  ok: boolean;
+  warning?: string;
+}
+
 /**
  * Ensures a GitHub repository has a webhook pointing to this backend's
- * `/api/webhooks/github` endpoint. Best-effort: logs errors without throwing
- * so Zap save/toggle never fails if the user lacks hook admin permissions.
+ * `/api/webhooks/github` endpoint. Returns a user-friendly warning if
+ * automatic registration fails (e.g. missing Admin permissions).
  */
-export async function ensureGitHubWebhook(accessToken: string | undefined, repository: string): Promise<void> {
-  if (!accessToken || !repository) return;
+export async function ensureGitHubWebhook(
+  accessToken: string | undefined,
+  repository: string,
+): Promise<WebhookRegistrationResult> {
+  if (!accessToken || !repository) return { ok: true };
 
   const backendUrl = process.env.BACKEND_URL || "";
   if (!backendUrl || backendUrl.includes("localhost") || backendUrl.includes("127.0.0.1")) {
-    return;
+    return { ok: true };
   }
 
   const webhookUrl = `${backendUrl.replace(/\/$/, "")}/api/webhooks/github`;
@@ -41,7 +49,7 @@ export async function ensureGitHubWebhook(accessToken: string | undefined, repos
     if (listRes.ok) {
       const hooks = (await listRes.json()) as GitHubHook[];
       const exists = hooks.some((h) => h.config?.url === webhookUrl);
-      if (exists) return;
+      if (exists) return { ok: true };
     }
 
     const createRes = (await fetch(`https://api.github.com/repos/${repository}/hooks`, {
@@ -62,10 +70,25 @@ export async function ensureGitHubWebhook(accessToken: string | undefined, repos
     if (!createRes.ok) {
       const errText = await createRes.text();
       console.warn(`[webhook] could not auto-register hook on ${repository}:`, createRes.status, errText);
-    } else {
-      console.log(`[webhook] registered GitHub hook on ${repository} -> ${webhookUrl}`);
+      if (createRes.status === 404 || createRes.status === 403) {
+        return {
+          ok: false,
+          warning: `Couldn't auto-connect webhook on ${repository} (missing Admin permissions). Ask the repo admin to add ${webhookUrl} in Settings → Webhooks, or use a repo you own.`,
+        };
+      }
+      return {
+        ok: false,
+        warning: `Couldn't auto-connect webhook on ${repository} (GitHub returned ${createRes.status}).`,
+      };
     }
+
+    console.log(`[webhook] registered GitHub hook on ${repository} -> ${webhookUrl}`);
+    return { ok: true };
   } catch (err) {
     console.warn(`[webhook] error ensuring hook on ${repository}:`, err);
+    return {
+      ok: false,
+      warning: `Couldn't reach GitHub to set up the webhook on ${repository}.`,
+    };
   }
 }
