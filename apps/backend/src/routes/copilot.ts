@@ -364,14 +364,16 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
       let modelParts: any[] = [];
 
       for await (const chunk of stream) {
-        if (chunk.text) {
-          sendEvent("chunk", { text: chunk.text });
-        }
         if (chunk.functionCalls && chunk.functionCalls.length > 0) {
           functionCalls.push(...chunk.functionCalls);
         }
         const parts = chunk.candidates?.[0]?.content?.parts;
         if (parts && parts.length > 0) {
+          for (const part of parts) {
+            if (part.text) {
+              sendEvent("chunk", { text: part.text });
+            }
+          }
           modelParts.push(...parts);
         }
       }
