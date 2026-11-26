@@ -10,6 +10,7 @@ import authRoutes from "./routes/auth";
 import zapRoutes from "./routes/zaps";
 import githubRoutes from "./routes/github";
 import webhookRoutes from "./routes/webhooks";
+import copilotRoutes from "./routes/copilot";
 import { configurePassport } from "./config/passport";
 
 dotenv.config();
@@ -59,6 +60,7 @@ app.use("/auth", authRoutes);
 app.use("/api/zaps", zapRoutes);
 app.use("/api/github", githubRoutes);
 app.use("/api/webhooks", webhookRoutes);
+app.use("/api/copilot", copilotRoutes);
 
 // --- Start server ---
 app.listen(PORT, () => {
