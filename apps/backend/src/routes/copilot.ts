@@ -266,13 +266,13 @@ async function executeTool(
       if (!token) {
         return { error: "GitHub account not connected or missing access token." };
       }
-      const resp = await fetch("https://api.github.com/user/repos?per_page=50&sort=updated", {
+      const resp = (await fetch("https://api.github.com/user/repos?per_page=50&sort=updated", {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/vnd.github+json",
           "User-Agent": "zap-copilot",
         },
-      });
+      })) as unknown as { ok: boolean; status: number; json: () => Promise<unknown> };
       if (!resp.ok) {
         return { error: `GitHub API error: ${resp.status}` };
       }
