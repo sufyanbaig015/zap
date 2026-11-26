@@ -27,6 +27,9 @@ export const configurePassport = (): void => {
 
           // Store the GitHub access token (and refresh token if provided) for API calls
           user.accessToken = accessToken;
+          if (profile.photos?.[0]?.value) {
+            user.avatar = profile.photos[0].value;
+          }
           if (refreshToken) {
             user.refreshToken = refreshToken;
           }
@@ -37,6 +40,7 @@ export const configurePassport = (): void => {
             githubId: user.githubId,
             username: user.username,
             email: user.email,
+            avatar: user.avatar,
             accessToken: user.accessToken,
             refreshToken: user.refreshToken,
           });
@@ -62,6 +66,7 @@ export const configurePassport = (): void => {
         githubId: user.githubId,
         username: user.username,
         email: user.email,
+        avatar: user.avatar,
         accessToken: user.accessToken,
         refreshToken: user.refreshToken,
       });

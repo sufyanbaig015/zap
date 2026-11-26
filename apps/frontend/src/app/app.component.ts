@@ -17,7 +17,12 @@ export class AppComponent implements OnInit {
   ngOnInit(): void {
     // Check if the user already has a valid session (cookie) with the backend
     this.auth.me().subscribe({
-      next: () => this.router.navigateByUrl('/dashboard'),
+      next: () => {
+        const path = window.location.pathname;
+        if (path === '/' || path === '/login') {
+          this.router.navigateByUrl('/dashboard');
+        }
+      },
       error: () => this.router.navigateByUrl('/login'),
     });
   }

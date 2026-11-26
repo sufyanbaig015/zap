@@ -5,6 +5,7 @@ declare global {
       githubId: string;
       username: string;
       email: string;
+      avatar?: string;
       accessToken?: string;
       refreshToken?: string;
     }
