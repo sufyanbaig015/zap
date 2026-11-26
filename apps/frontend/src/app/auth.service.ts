@@ -10,6 +10,7 @@ export interface User {
   githubId: string;
   username: string;
   email: string;
+  avatar?: string;
   accessToken?: string;
   refreshToken?: string;
 }
