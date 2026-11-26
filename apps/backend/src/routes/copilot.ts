@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth";
 import Zap from "../models/Zap";
 import ZapRun from "../models/ZapRun";
 import User from "../models/User";
+import CopilotThread from "../models/CopilotThread";
 
 const router: express.Router = express.Router();
 router.use(requireAuth);
@@ -284,6 +285,48 @@ async function executeTool(
   }
 }
 
+router.get("/threads", async (req: express.Request, res: express.Response) => {
+  try {
+    const userId = req.user!.id;
+    const threads = await CopilotThread.find({ userId })
+      .select("_id title zapId updatedAt createdAt")
+      .sort({ updatedAt: -1 })
+      .limit(50)
+      .lean();
+    res.json({ threads });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Failed to list threads" });
+  }
+});
+
+router.get("/threads/:id", async (req: express.Request, res: express.Response) => {
+  try {
+    const userId = req.user!.id;
+    const thread = await CopilotThread.findOne({ _id: req.params.id, userId }).lean();
+    if (!thread) {
+      res.status(404).json({ error: "Thread not found" });
+      return;
+    }
+    res.json({ thread });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Failed to load thread" });
+  }
+});
+
+router.delete("/threads/:id", async (req: express.Request, res: express.Response) => {
+  try {
+    const userId = req.user!.id;
+    const deleted = await CopilotThread.findOneAndDelete({ _id: req.params.id, userId }).lean();
+    if (!deleted) {
+      res.status(404).json({ error: "Thread not found" });
+      return;
+    }
+    res.json({ deleted: true, id: req.params.id });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || "Failed to delete thread" });
+  }
+});
+
 router.post("/chat", async (req: express.Request, res: express.Response) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -293,15 +336,37 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
     }
 
     const userId = req.user!.id;
-    const { messages, currentZapId } = req.body as {
+    const { messages, currentZapId, threadId } = req.body as {
       messages: Array<{ role: "user" | "model"; text: string }>;
       currentZapId?: string;
+      threadId?: string;
     };
 
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: "messages array is required" });
       return;
     }
+
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.text || "New Chat";
+    let thread = threadId
+      ? await CopilotThread.findOne({ _id: threadId, userId })
+      : null;
+
+    if (!thread) {
+      thread = await CopilotThread.create({
+        userId,
+        zapId: currentZapId || undefined,
+        title: lastUserMsg.slice(0, 50) + (lastUserMsg.length > 50 ? "..." : ""),
+        messages: [],
+      });
+    }
+
+    thread.messages.push({
+      role: "user",
+      text: lastUserMsg,
+      createdAt: new Date(),
+    });
+    await thread.save();
 
     const ai = new GoogleGenAI({ apiKey });
     const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
@@ -331,6 +396,8 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
 
     const mutatedZapIds = new Set<string>();
     const createdZapIds: string[] = [];
+    const executedToolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    let assistantText = "";
     const MAX_TURNS = 8;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -371,6 +438,7 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
         if (parts && parts.length > 0) {
           for (const part of parts) {
             if (part.text) {
+              assistantText += part.text;
               sendEvent("chunk", { text: part.text });
             }
           }
@@ -385,6 +453,7 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
         for (const call of functionCalls) {
           const toolName = call.name || "";
           const toolArgs = (call.args || {}) as Record<string, any>;
+          executedToolCalls.push({ name: toolName, args: toolArgs });
           sendEvent("tool_call", { name: toolName, args: toolArgs });
           const result = await executeTool(toolName, toolArgs, userId, mutatedZapIds, createdZapIds);
           functionResponseParts.push({
@@ -404,7 +473,16 @@ router.post("/chat", async (req: express.Request, res: express.Response) => {
       }
     }
 
+    thread.messages.push({
+      role: "model",
+      text: assistantText,
+      toolCalls: executedToolCalls.length > 0 ? executedToolCalls : undefined,
+      createdAt: new Date(),
+    });
+    await thread.save();
+
     sendEvent("done", {
+      threadId: String(thread._id),
       mutatedZapIds: Array.from(mutatedZapIds),
       createdZapId: createdZapIds[0] || undefined,
     });

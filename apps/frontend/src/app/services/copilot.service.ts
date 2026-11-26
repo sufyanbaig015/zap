@@ -1,4 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 const API = environment.apiUrl;
@@ -9,18 +11,50 @@ export interface CopilotMessage {
   toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
 }
 
+export interface CopilotThreadSummary {
+  _id: string;
+  title: string;
+  zapId?: string;
+  updatedAt: string;
+}
+
+export interface CopilotThread extends CopilotThreadSummary {
+  messages: CopilotMessage[];
+}
+
 export interface CopilotStreamCallbacks {
   onChunk: (text: string) => void;
   onToolCall: (toolCall: { name: string; args: Record<string, unknown> }) => void;
-  onDone: (result: { mutatedZapIds: string[]; createdZapId?: string }) => void;
+  onDone: (result: { threadId?: string; mutatedZapIds: string[]; createdZapId?: string }) => void;
   onError: (error: string) => void;
 }
 
 @Injectable({ providedIn: 'root' })
 export class CopilotService {
+  private http = inject(HttpClient);
+
+  listThreads(): Observable<{ threads: CopilotThreadSummary[] }> {
+    return this.http.get<{ threads: CopilotThreadSummary[] }>(`${API}/api/copilot/threads`, {
+      withCredentials: true,
+    });
+  }
+
+  getThread(id: string): Observable<{ thread: CopilotThread }> {
+    return this.http.get<{ thread: CopilotThread }>(`${API}/api/copilot/threads/${id}`, {
+      withCredentials: true,
+    });
+  }
+
+  deleteThread(id: string): Observable<{ deleted: boolean; id: string }> {
+    return this.http.delete<{ deleted: boolean; id: string }>(`${API}/api/copilot/threads/${id}`, {
+      withCredentials: true,
+    });
+  }
+
   async chatStream(
     messages: Array<{ role: 'user' | 'model'; text: string }>,
     currentZapId: string | undefined,
+    threadId: string | undefined,
     callbacks: CopilotStreamCallbacks,
   ): Promise<void> {
     try {
@@ -28,7 +62,7 @@ export class CopilotService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ messages, currentZapId }),
+        body: JSON.stringify({ messages, currentZapId, threadId }),
       });
 
       if (!resp.ok || !resp.body) {

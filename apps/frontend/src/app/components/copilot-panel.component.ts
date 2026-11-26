@@ -1,6 +1,8 @@
-import { Component, EventEmitter, inject, Input, Output, signal } from '@angular/core';
+import { Component, EventEmitter, inject, Input, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CopilotMessage, CopilotService } from '../services/copilot.service';
+import { CopilotMessage, CopilotService, CopilotThreadSummary } from '../services/copilot.service';
+
+const ACTIVE_THREAD_KEY = 'zap_copilot_active_thread';
 
 @Component({
   selector: 'app-copilot-panel',
@@ -22,16 +24,24 @@ import { CopilotMessage, CopilotService } from '../services/copilot.service';
           </div>
         </div>
         <div class="flex items-center gap-1">
-          @if (messages().length > 0) {
-            <button
-              type="button"
-              (click)="clearChat()"
-              title="Clear chat"
-              class="rounded-lg p-1.5 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-700 cursor-pointer"
-            >
-              Clear
-            </button>
-          }
+          <button
+            type="button"
+            (click)="startNewThread()"
+            title="New chat"
+            class="rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 cursor-pointer"
+          >
+            + New
+          </button>
+          <button
+            type="button"
+            (click)="toggleHistory()"
+            title="Chat history"
+            class="rounded-lg px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 cursor-pointer"
+            [class.bg-gray-100]="historyOpen()"
+            [class.text-gray-900]="historyOpen()"
+          >
+            History
+          </button>
           <button
             type="button"
             (click)="close.emit()"
@@ -44,6 +54,34 @@ import { CopilotMessage, CopilotService } from '../services/copilot.service';
           </button>
         </div>
       </div>
+
+      <!-- History Drawer -->
+      @if (historyOpen()) {
+        <div class="max-h-60 overflow-y-auto border-b border-gray-200 bg-gray-50 p-2 space-y-1">
+          @if (threads().length === 0) {
+            <p class="px-2 py-3 text-center text-xs text-gray-400">No saved chat threads yet.</p>
+          }
+          @for (t of threads(); track t._id) {
+            <div
+              class="group flex items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors cursor-pointer"
+              [class.bg-indigo-50]="t._id === activeThreadId()"
+              [class.text-indigo-900]="t._id === activeThreadId()"
+              [class.hover:bg-gray-100]="t._id !== activeThreadId()"
+              (click)="selectThread(t._id)"
+            >
+              <span class="truncate font-medium">{{ t.title }}</span>
+              <button
+                type="button"
+                (click)="deleteThread(t._id, $event)"
+                class="opacity-0 group-hover:opacity-100 rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                title="Delete thread"
+              >
+                ✕
+              </button>
+            </div>
+          }
+        </div>
+      }
 
       <!-- Messages -->
       <div class="flex-1 overflow-y-auto p-4 space-y-4">
@@ -128,7 +166,7 @@ import { CopilotMessage, CopilotService } from '../services/copilot.service';
     </aside>
   `,
 })
-export class CopilotPanelComponent {
+export class CopilotPanelComponent implements OnInit {
   private copilotService = inject(CopilotService);
 
   @Input() currentZapId?: string;
@@ -136,6 +174,9 @@ export class CopilotPanelComponent {
   @Output() zapMutated = new EventEmitter<{ mutatedZapIds: string[]; createdZapId?: string }>();
 
   messages = signal<CopilotMessage[]>([]);
+  threads = signal<CopilotThreadSummary[]>([]);
+  activeThreadId = signal<string | undefined>(undefined);
+  historyOpen = signal(false);
   loading = signal(false);
   error = signal('');
   inputText = '';
@@ -146,9 +187,60 @@ export class CopilotPanelComponent {
     'Enable this Zap and rename it',
   ];
 
-  clearChat(): void {
+  ngOnInit(): void {
+    const savedId = localStorage.getItem(ACTIVE_THREAD_KEY);
+    if (savedId) {
+      this.selectThread(savedId);
+    }
+    this.refreshThreads();
+  }
+
+  refreshThreads(): void {
+    this.copilotService.listThreads().subscribe({
+      next: (res) => this.threads.set(res.threads || []),
+      error: () => {},
+    });
+  }
+
+  toggleHistory(): void {
+    const next = !this.historyOpen();
+    this.historyOpen.set(next);
+    if (next) this.refreshThreads();
+  }
+
+  startNewThread(): void {
+    this.activeThreadId.set(undefined);
     this.messages.set([]);
     this.error.set('');
+    this.historyOpen.set(false);
+    localStorage.removeItem(ACTIVE_THREAD_KEY);
+  }
+
+  selectThread(threadId: string): void {
+    this.copilotService.getThread(threadId).subscribe({
+      next: (res) => {
+        this.activeThreadId.set(res.thread._id);
+        this.messages.set(res.thread.messages || []);
+        this.historyOpen.set(false);
+        this.error.set('');
+        localStorage.setItem(ACTIVE_THREAD_KEY, res.thread._id);
+      },
+      error: () => {
+        localStorage.removeItem(ACTIVE_THREAD_KEY);
+      },
+    });
+  }
+
+  deleteThread(threadId: string, event: Event): void {
+    event.stopPropagation();
+    this.copilotService.deleteThread(threadId).subscribe({
+      next: () => {
+        this.threads.update((list) => list.filter((t) => t._id !== threadId));
+        if (this.activeThreadId() === threadId) {
+          this.startNewThread();
+        }
+      },
+    });
   }
 
   sendQuickPrompt(prompt: string): void {
@@ -180,10 +272,9 @@ export class CopilotPanelComponent {
     this.loading.set(true);
 
     const payload = updated.map((m) => ({ role: m.role, text: m.text }));
-    // Add an empty assistant message that will be populated live via SSE
     this.messages.update((msgs) => [...msgs, { role: 'model', text: '', toolCalls: [] }]);
 
-    this.copilotService.chatStream(payload, this.currentZapId, {
+    this.copilotService.chatStream(payload, this.currentZapId, this.activeThreadId(), {
       onChunk: (chunkText) => {
         this.messages.update((msgs) => {
           const next = [...msgs];
@@ -206,9 +297,19 @@ export class CopilotPanelComponent {
           }
           return next;
         });
+        if (['create_zap', 'update_zap', 'toggle_zap'].includes(tc.name) && this.currentZapId) {
+          setTimeout(() => {
+            this.zapMutated.emit({ mutatedZapIds: [this.currentZapId!] });
+          }, 300);
+        }
       },
       onDone: (res) => {
         this.loading.set(false);
+        if (res.threadId) {
+          this.activeThreadId.set(res.threadId);
+          localStorage.setItem(ACTIVE_THREAD_KEY, res.threadId);
+          this.refreshThreads();
+        }
         if (res.mutatedZapIds?.length || res.createdZapId) {
           this.zapMutated.emit({
             mutatedZapIds: res.mutatedZapIds || [],

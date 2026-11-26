@@ -139,7 +139,7 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
         @if (copilotOpen()) {
           <app-copilot-panel
             [currentZapId]="zap()._id"
-            (close)="copilotOpen.set(false)"
+            (close)="toggleCopilot(false)"
             (zapMutated)="onCopilotMutated($event)"
           />
         }
@@ -412,7 +412,7 @@ type ActiveStep = { type: 'trigger' } | { type: 'action'; index: number } | null
         <!-- Bottom-Right Copilot Trigger Button -->
         <button
           type="button"
-          (click)="copilotOpen.set(!copilotOpen())"
+          (click)="toggleCopilot(!copilotOpen())"
           class="absolute bottom-5 right-5 z-20 inline-flex items-center gap-2 rounded-full bg-gray-900 px-4 py-2.5 text-xs font-semibold text-white shadow-lg transition-all hover:bg-gray-800 hover:scale-[1.02] cursor-pointer"
         >
           <svg class="h-4 w-4 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -998,7 +998,16 @@ export class ZapBuilderComponent implements OnInit {
     return step.type === 'trigger' ? '1. Trigger' : `${step.index + 2}. Action`;
   });
 
-  copilotOpen = signal(false);
+  copilotOpen = signal(localStorage.getItem('zap_copilot_open') === 'true');
+
+  toggleCopilot(open: boolean): void {
+    this.copilotOpen.set(open);
+    try {
+      localStorage.setItem('zap_copilot_open', String(open));
+    } catch {
+      // ignore
+    }
+  }
 
   onCopilotMutated(event: { mutatedZapIds: string[]; createdZapId?: string }): void {
     const currentId = this.zap()._id;
